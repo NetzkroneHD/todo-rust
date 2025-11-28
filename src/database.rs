@@ -1,19 +1,19 @@
 use crate::model;
 use chrono::DateTime;
 use rusqlite;
-use rusqlite::{params, Connection, Error};
+use rusqlite::{params, Connection};
 use std::path::Path;
 
 pub fn get_database_file_path() -> &'static Path {
     Path::new("test.db")
 }
 
-pub fn connect() -> Result<Connection, Error> {
+pub fn connect() -> Result<Connection, rusqlite::Error> {
     let path = get_database_file_path();
     Connection::open(path).map_or_else(|e| Err(e), |conn| Ok(conn))
 }
 
-pub fn create_tables(connection: &Connection) -> Result<(), Error> {
+pub fn create_tables(connection: &Connection) -> Result<(), rusqlite::Error> {
     connection.execute(
         "
         CREATE TABLE IF NOT EXISTS tasks (
@@ -27,7 +27,7 @@ pub fn create_tables(connection: &Connection) -> Result<(), Error> {
 
 }
 
-pub fn create_task(connection: &Connection, name: &str, done: bool, deadline: Option<DateTime<chrono::FixedOffset>>) -> Result<model::Task, Error> {
+pub fn create_task(connection: &Connection, name: String, done: bool, deadline: Option<DateTime<chrono::FixedOffset>>) -> Result<model::Task, rusqlite::Error> {
     let query = "INSERT INTO tasks (name, done, deadline) VALUES (?1, ?2, ?3)";
 
     connection.execute(query, params![name, done, deadline.map(|dt| dt.to_rfc3339())])?;
@@ -37,6 +37,26 @@ pub fn create_task(connection: &Connection, name: &str, done: bool, deadline: Op
         done,
         deadline,
     })
+}
+
+
+pub fn update_task(connection: &Connection, task: &model::Task) -> Result<(), rusqlite::Error> {
+    if exists_task(connection, task.id)? {
+        connection.execute("UPDATE tasks SET name =?1, done = ?2, deadline = ?3 WHERE id = ?4",
+                           params![task.name, task.done, task.deadline.map(|d| d.to_rfc3339()), task.id])?;
+        Ok(())
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
+
+pub fn delete_task(connection: &Connection, id: i64) -> Result<(), rusqlite::Error> {
+    connection.execute("DELETE FROM tasks WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+pub fn exists_task(connection: &Connection, id: i64) -> Result<bool, rusqlite::Error> {
+    connection.query_row("SELECT id FROM tasks WHERE id = ?1", params![id], |_| { Ok(true) }).or_else(|_| { Ok(false) })
 }
 
 pub fn get_all_tasks(connection: &Connection) -> Result<Vec<model::Task>, Box<dyn std::error::Error>> {
