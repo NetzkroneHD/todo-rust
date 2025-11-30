@@ -31,19 +31,14 @@ pub fn create_task(connection: &Connection, name: String, done: bool, deadline: 
     let query = "INSERT INTO tasks (name, done, deadline) VALUES (?1, ?2, ?3)";
 
     connection.execute(query, params![name, done, deadline.map(|dt| dt.to_rfc3339())])?;
-    Ok(model::Task {
-        id: connection.last_insert_rowid(),
-        name: name.to_string(),
-        done,
-        deadline,
-    })
+    Ok(model::Task::new(connection.last_insert_rowid(), name.to_string(), done, deadline))
 }
 
 
 pub fn update_task(connection: &Connection, task: &model::Task) -> Result<(), rusqlite::Error> {
-    if exists_task(connection, task.id)? {
+    if exists_task(connection, task.get_id())? {
         connection.execute("UPDATE tasks SET name =?1, done = ?2, deadline = ?3 WHERE id = ?4",
-                           params![task.name, task.done, task.deadline.map(|d| d.to_rfc3339()), task.id])?;
+                           params![task.name, task.done, task.deadline.map(|d| d.to_rfc3339()), task.get_id()])?;
         Ok(())
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows)
@@ -60,21 +55,13 @@ pub fn exists_task(connection: &Connection, id: i64) -> Result<bool, rusqlite::E
 }
 
 pub fn get_all_tasks(connection: &Connection) -> Result<Vec<model::Task>, Box<dyn std::error::Error>> {
-    let mut tasks: Vec<model::Task> = Vec::new();
     let mut ps = connection.prepare("SELECT id, name, done, deadline FROM tasks")?;
     let rows = ps.query_map(params![], |row| {
-        Ok(model::Task {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            done: row.get(2)?,
-            deadline: row.get(3).map_or_else(
-                |_| None,
-                |d: String| DateTime::parse_from_rfc3339(d.as_str()).map_or_else(|_| None, |d| Some(d))),
-        })
+        Ok(model::Task::new(
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3).map_or_else(|_| None, |d: String| DateTime::parse_from_rfc3339(d.as_str()).map_or_else(|_| None, |d| Some(d)))))
     })?;
-    for row in rows {
-        let task = row?;
-        tasks.push(task);
-    };
-    Ok(tasks)
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }

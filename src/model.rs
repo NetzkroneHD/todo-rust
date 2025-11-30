@@ -2,10 +2,25 @@ use chrono;
 use std::fmt::{Display, Formatter};
 
 pub struct Task {
-    pub id: i64,
+    id: i64,
     pub name: String,
     pub done: bool,
     pub deadline: Option<chrono::DateTime<chrono::FixedOffset>>,
+}
+
+impl Task {
+    pub fn new(id: i64, name: String, done: bool, deadline: Option<chrono::DateTime<chrono::FixedOffset>>) -> Self {
+        Task {
+            id,
+            name,
+            done,
+            deadline,
+        }
+    }
+
+    pub fn get_id(&self) -> i64 {
+        self.id
+    }
 }
 
 impl Display for Task {
